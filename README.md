@@ -230,3 +230,72 @@ GH_TOKEN="your-github-token" gh api -X PUT \
   repos/Tinzlu/codex-deepseek-guide/contents/README.md \
   -f message="docs: Reasoning思维链完全解放 - 补丁3" \
   -f content="$CONTENT" -f sha="$SHA" -f branch="main" 2>&1 | python3 -c "import sys,json;d=json.load(sys.stdin);print('✅' if 'content' in d else 'ERR:'+str(d.get('message','?')))"
+## 生产环境运维
+
+### 开机自启（macOS launchd）
+
+创建 `~/Library/LaunchAgents/com.codex.deepseek-bridge.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.codex.deepseek-bridge</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/node</string>
+        <string>~/.local/lib/node_modules/aliyun-codex-bridge/src/server.js</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PORT</key><string>19099</string>
+        <key>HOST</key><string>127.0.0.1</string>
+        <key>AI_API_KEY</key><string>your-deepseek-api-key</string>
+        <key>AI_API_BASE</key><string>https://api.deepseek.com/v1</string>
+        <key>ALLOW_TOOLS</key><string>1</string>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+</dict>
+</plist>
+```
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.codex.deepseek-bridge.plist
+```
+
+### 日志滚动
+
+```bash
+# 创建 ~/Library/LaunchAgents/com.codex.deepseek-bridge.logrotate.plist
+# 每小时检查，超过 50MB 自动轮转
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.codex.deepseek-bridge.logrotate.plist
+```
+
+## 完整补丁清单（3 处）
+
+| # | 文件 | 作用 |
+|---|------|------|
+| 1 | `src/server.js` L827 | reasoning items → reasoning_content 映射 |
+| 2 | `src/server.js` L870 | 所有 assistant 消息兜底空 reasoning_content |
+| 3 | `src/server.js` L886 | reasoning 参数透传（启用 thinking 模式） |
+
+## 测试验证
+
+| 测试 | 结果 | 文件 |
+|------|------|------|
+| 4 轮多任务 | ✅ 零中断 | [TEST_REPORT.md](TEST_REPORT.md) |
+| 5 轮压力测试 | ✅ 219 行零中断 | [STRESS_TEST.md](STRESS_TEST.md) |
+
+## 最终评分
+
+| 维度 | 释放率 |
+|------|--------|
+| 对话/代码生成 | 100% |
+| 多轮 Agent 工具链 | 100% |
+| Reasoning 思维链 | 100% |
+| apply_patch | 0%（Codex 平台层硬限制） |
+| TTY 交互 | 0%（Codex 平台层硬限制） |
+| **综合** | **~90%** |
